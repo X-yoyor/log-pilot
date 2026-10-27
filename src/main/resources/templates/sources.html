@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('日志源管理')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('sources')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center my-3">
+        <h5 class="mb-0">日志源管理</h5>
+        <button class="btn btn-primary" onclick="lpEditSource(null)">+ 添加日志源</button>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                    <tr>
+                        <th>ID</th><th>名称</th><th>模式</th><th>服务器</th><th>日志路径</th>
+                        <th>格式/编码</th><th>间隔</th><th>状态</th><th>最近采集</th><th style="width:280px">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:if="${#lists.isEmpty(sources)}">
+                        <td colspan="10" class="text-muted text-center py-5">暂无日志源</td>
+                    </tr>
+                    <tr th:each="s : ${sources}">
+                        <td th:text="${s.id}"></td>
+                        <td th:text="${s.name}"></td>
+                        <td><span class="badge bg-dark" th:text="${s.mode}"></span></td>
+                        <td class="small"
+                            th:text="${s.mode=='LOCAL'} ? '本机' : (${serverNames[s.serverId]} ?: ('#' + ${s.serverId}))"></td>
+                        <td class="mono small" th:title="${s.logPath}" style="max-width:260px">
+                            <span class="d-inline-block text-truncate" style="max-width:250px" th:text="${s.logPath}"></span>
+                        </td>
+                        <td class="small" th:text="${s.formatType} + ' / ' + ${s.encoding}"></td>
+                        <td class="text-nowrap" th:text="${s.intervalMinutes} + ' 分钟'"></td>
+                        <td>
+                            <span class="badge" th:classappend="${s.enabled} ? 'bg-success' : 'bg-secondary'"
+                                  th:text="${s.enabled} ? '启用' : '停用'"></span>
+                            <span th:if="${silencedSourceIds != null and silencedSourceIds.contains(s.id)}"
+                                  class="badge bg-warning ms-1" title="静默中，告警已抑制">🔕 静默</span>
+                        </td>
+                        <td class="small text-nowrap" th:if="${s.lastCollectTime}"
+                            th:text="${#temporals.format(s.lastCollectTime, 'MM-dd HH:mm:ss')}"></td>
+                        <td class="small text-muted" th:unless="${s.lastCollectTime}">未采集</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-success"
+                                        th:onclick="'lpCollect(this, ' + ${s.id} + ')'">采集</button>
+                                <button class="btn btn-outline-primary"
+                                        th:onclick="'lpEditSource(' + ${s.id} + ')'">编辑</button>
+                            </div>
+                            <form class="d-inline" method="post" th:action="@{'/sources/' + ${s.id} + '/toggle'}">
+                                <button class="btn btn-sm btn-outline-warning" th:text="${s.enabled} ? '停用' : '启用'"></button>
+                            </form>
+                            <form class="d-inline" method="post" th:action="@{'/sources/' + ${s.id} + '/reset'}"
+                                  onsubmit="return lpConfirm(this, '重置后将从头重新采集该源所有日志，确认？')">
+                                <button class="btn btn-sm btn-outline-secondary">重置位点</button>
+                            </form>
+                            <form class="d-inline" method="post" th:action="@{'/sources/' + ${s.id} + '/delete'}"
+                                  onsubmit="return lpConfirm(this, '确认删除该日志源？历史异常数据将保留。')">
+                                <button class="btn btn-sm btn-outline-danger">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 采集记录 -->
+    <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
+        <h6 class="mb-0">最近采集记录</h6>
+    </div>
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                    <tr><th>时间</th><th>日志源</th><th>状态</th><th>文件</th><th>行数</th><th>新增异常</th><th>耗时</th><th>信息</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr th:if="${#lists.isEmpty(collectLogs)}"><td colspan="8" class="text-muted text-center py-4">暂无采集记录</td></tr>
+                    <tr th:each="c : ${collectLogs}">
+                        <td class="text-nowrap small" th:text="${#temporals.format(c.startAt, 'MM-dd HH:mm:ss')}"></td>
+                        <td th:text="${c.sourceName}"></td>
+                        <td>
+                            <span class="badge" th:classappend="${c.status=='OK'} ? 'bg-success' : 'bg-danger'"
+                                  th:text="${c.status}"></span>
+                        </td>
+                        <td th:text="${c.files}"></td>
+                        <td th:text="${c.lines}"></td>
+                        <td><span class="badge bg-danger" th:if="${c.events > 0}" th:text="${c.events}"></span>
+                            <span th:if="${c.events == 0}" class="text-muted">0</span></td>
+                        <td th:text="${c.costMs} + 'ms'"></td>
+                        <td class="small text-muted text-truncate" style="max-width:300px" th:title="${c.message}"
+                            th:text="${c.message}"></td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志源编辑弹窗 -->
+<div class="modal fade" id="sourceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" th:action="@{/sources/save}">
+                <div class="modal-header">
+                    <h5 class="modal-title">日志源配置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="s-id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">名称 *</label>
+                            <input class="form-control" name="name" id="s-name" required placeholder="如 订单服务-error.log">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">采集模式</label>
+                            <select class="form-select" name="mode" id="s-mode" onchange="lpSourceModeChange()">
+                                <option value="SSH">SSH 远程</option>
+                                <option value="LOCAL">LOCAL 本机</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 source-server-field">
+                            <label class="form-label">服务器</label>
+                            <select class="form-select" name="serverId" id="s-serverId">
+                                <option th:each="sv : ${servers}" th:if="${sv.type != 'LOCAL'}"
+                                        th:value="${sv.id}" th:text="${sv.name}"></option>
+                            </select>
+                        </div>
+                        <div class="col-md-9">
+                            <label class="form-label">日志路径 *</label>
+                            <input class="form-control mono" name="logPath" id="s-logPath" required
+                                   placeholder="/var/log/myapp/*.log 或 D:/logs/app/error*.log">
+                            <div class="form-text">支持通配符 * ?；填目录则采集其下所有 .log；文件变小视为轮转，自动重采</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">解析格式</label>
+                            <select class="form-select" name="formatType" id="s-formatType">
+                                <option value="AUTO">AUTO 智能识别</option>
+                                <option value="RAW">RAW 逐行</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">编码</label>
+                            <select class="form-select" name="encoding" id="s-encoding">
+                                <option>UTF-8</option><option>GBK</option><option>GB18030</option><option>UTF-16</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">采集间隔（分钟）</label>
+                            <input class="form-control" name="intervalMinutes" id="s-interval" type="number" value="5" min="1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">备注</label>
+                            <input class="form-control" name="remark" id="s-remark">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+<script>
+    const sourcesData = /*[[${sources}]]*/ [];
+    function lpEditSource(id) {
+        const s = sourcesData.find(x => x.id === id);
+        document.getElementById('s-id').value = id || '';
+        document.getElementById('s-name').value = s ? s.name : '';
+        document.getElementById('s-mode').value = s ? s.mode : 'SSH';
+        if (s && s.serverId) document.getElementById('s-serverId').value = s.serverId;
+        document.getElementById('s-logPath').value = s ? s.logPath : '';
+        document.getElementById('s-formatType').value = s ? s.formatType : 'AUTO';
+        document.getElementById('s-encoding').value = s ? s.encoding : 'UTF-8';
+        document.getElementById('s-interval').value = s && s.intervalMinutes ? s.intervalMinutes : 5;
+        document.getElementById('s-remark').value = s ? s.remark : '';
+        lpSourceModeChange();
+        new bootstrap.Modal(document.getElementById('sourceModal')).show();
+    }
+    function lpSourceModeChange() {
+        const isLocal = document.getElementById('s-mode').value === 'LOCAL';
+        document.querySelector('.source-server-field').classList.toggle('d-none', isLocal);
+    }
+    function lpCollect(btn, id) {
+        lpAction(btn, '/sources/' + id + '/collect', { reloadDelay: 2 });
+    }
+</script>
+</body>
+</html>

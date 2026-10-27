@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('操作审计')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center my-3">
+        <h5 class="mb-0">操作审计 <span class="text-muted small">（谁在什么时候做了什么）</span></h5>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/settings}">返回系统设置 ›</a>
+    </div>
+
+    <form class="row g-2 mb-2" method="get" th:action="@{/audit}">
+        <div class="col-md-3">
+            <input class="form-control" name="actor" th:value="${actor}" placeholder="按操作人过滤">
+        </div>
+        <div class="col-md-3">
+            <input class="form-control" name="action" th:value="${action}" placeholder="按动作过滤，如 保存 / 删除 / AI">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary">查询</button>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                    <tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr th:if="${#lists.isEmpty(logs)}">
+                        <td colspan="5" class="text-muted text-center py-5">暂无审计记录</td>
+                    </tr>
+                    <tr th:each="a : ${logs}">
+                        <td class="text-nowrap small" th:text="${#temporals.format(a.createdAt, 'MM-dd HH:mm:ss')}"></td>
+                        <td><span class="badge bg-dark" th:text="${a.actor}"></span></td>
+                        <td th:text="${a.action}"></td>
+                        <td class="small">
+                            <span th:text="${a.targetName ?: (a.targetType + '#' + (a.targetId ?: '-'))}"></span>
+                        </td>
+                        <td class="small text-muted mono" style="max-width:420px">
+                            <span class="d-inline-block text-truncate" style="max-width:410px"
+                                  th:title="${a.detail}" th:text="${a.detail}"></span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <nav th:if="${page.totalPages > 1}" class="mt-3">
+        <ul class="pagination pagination-sm">
+            <li class="page-item" th:classappend="${page.first} ? 'disabled'">
+                <a class="page-link" th:href="@{/audit(actor=${actor}, action=${action}, page=${page.number - 1})}">上一页</a>
+            </li>
+            <li class="page-item disabled"><span class="page-link"
+                 th:text="${page.number + 1} + ' / ' + ${page.totalPages}"></span></li>
+            <li class="page-item" th:classappend="${page.last} ? 'disabled'">
+                <a class="page-link" th:href="@{/audit(actor=${actor}, action=${action}, page=${page.number + 1})}">下一页</a>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+</body>
+</html>

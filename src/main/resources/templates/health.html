@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('系统健康')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('health')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center my-3">
+        <h5 class="mb-0">系统健康 <span class="text-muted small">（平台自监控：资源水位与采集链路状态）</span></h5>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/audit}">操作审计 ›</a>
+    </div>
+
+    <!-- 资源水位 -->
+    <div class="row g-3 mt-1">
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value" th:classappend="${health.heapPct > 85} ? 'text-danger' : 'text-primary'"
+                     th:text="${health.heapPct} + '%'">0%</div>
+                <div class="stat-label">堆内存
+                    <span class="mono small" th:text="'(' + ${health.heapUsedMb} + '/' + ${health.heapMaxMb} + ' MB)'"></span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value" th:classappend="${health.diskPct > 85} ? 'text-danger' : (${health.diskPct > 70} ? 'text-warn' : 'text-primary')"
+                     th:text="${health.diskPct} + '%'">0%</div>
+                <div class="stat-label">磁盘使用
+                    <span class="mono small" th:text="'剩 ' + ${health.diskFreeGb} + ' GB'"></span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value text-primary" th:text="${health.dataDirMb} + ' MB'">0</div>
+                <div class="stat-label">数据库体积</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value" th:text="${health.uptimeHours} + ' h'">0</div>
+                <div class="stat-label">运行时长
+                    <span class="mono small" th:if="${health.cpuPct >= 0}" th:text="'CPU ' + ${health.cpuPct} + '%'"></span>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value" th:classappend="${health.failingSources > 0} ? 'text-danger' : 'text-success'"
+                     th:text="${health.failingSources}">0</div>
+                <div class="stat-label">连续失败采集源</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value" th:classappend="${health.overdueSources > 0} ? 'text-warn' : 'text-success'"
+                     th:text="${health.overdueSources}">0</div>
+                <div class="stat-label">调度延迟采集源</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 采集链路状态 -->
+    <div class="card mt-3">
+        <div class="card-header">采集链路状态</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                    <tr><th>日志源</th><th>状态</th><th>最近采集</th><th>下次采集</th><th>连续失败</th><th>今日异常</th><th>判定</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="s : ${health.sources}">
+                        <td th:text="${s.name}"></td>
+                        <td>
+                            <span class="badge" th:classappend="${s.lastStatus == 'OK'} ? 'bg-success' : (${s.lastStatus == 'FAIL'} ? 'bg-danger' : 'bg-secondary')"
+                                  th:text="${s.lastStatus}"></span>
+                            <span th:if="${!s.enabled}" class="badge bg-dark">已停用</span>
+                        </td>
+                        <td class="small text-nowrap" th:if="${s.lastRun}" th:text="${#temporals.format(s.lastRun, 'MM-dd HH:mm:ss')}"></td>
+                        <td class="small text-muted" th:unless="${s.lastRun}">—</td>
+                        <td class="small text-nowrap" th:if="${s.nextRun}" th:text="${#temporals.format(s.nextRun, 'MM-dd HH:mm:ss')}"></td>
+                        <td class="small text-muted" th:unless="${s.nextRun}">—</td>
+                        <td class="num" th:text="${s.failStreak}"></td>
+                        <td class="num" th:text="${s.eventsToday}"></td>
+                        <td>
+                            <span class="badge bg-danger" th:if="${s.failStreak > 1}">连续失败，需处理</span>
+                            <span class="badge bg-warning" th:if="${s.failStreak == 1}">最近一次失败</span>
+                            <span class="badge bg-warning" th:if="${s.failStreak == 0 and s.overdue}">调度延迟</span>
+                            <span class="badge bg-success" th:if="${s.failStreak == 0 and !s.overdue}">正常</span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+</body>
+</html>

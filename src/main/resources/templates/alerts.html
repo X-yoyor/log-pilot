@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('告警')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('alerts')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center my-3">
+        <h5 class="mb-0">告警</h5>
+        <div>
+            <button class="btn btn-outline-secondary btn-sm me-1" data-bs-toggle="modal" data-bs-target="#testMailModal"
+                    th:classappend="${!mailEnabled} ? 'disabled' : ''">发测试邮件</button>
+            <button class="btn btn-primary btn-sm" onclick="lpEditAlert(null)">+ 添加规则</button>
+        </div>
+    </div>
+
+    <ul class="nav nav-pills mb-3" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#tab-rules" type="button">告警规则</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-channels" type="button">通知渠道 <span class="badge bg-dark num" th:text="${#lists.size(channels)}"></span></button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#tab-silence" type="button">静默窗口</button></li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- 告警规则 -->
+        <div class="tab-pane fade show active" id="tab-rules">
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                            <tr><th>规则</th><th>指标</th><th>范围</th><th>阈值/窗口</th><th>冷却</th>
+                                <th>通知渠道</th><th>触发次数</th><th>最近触发</th><th>状态</th><th style="width:150px">操作</th></tr>
+                            </thead>
+                            <tbody>
+                            <tr th:if="${#lists.isEmpty(rules)}">
+                                <td colspan="10" class="text-muted text-center py-4">
+                                    暂无告警规则。建议添加：30 分钟内异常事件 ≥ 50 → 通知渠道。
+                                </td>
+                            </tr>
+                            <tr th:each="r : ${rules}">
+                                <td th:text="${r.name}"></td>
+                                <td>
+                                    <span class="badge bg-primary" th:text="${r.metric == 'NEW_GROUP'} ? '新增异常类型' : '异常事件数'"></span>
+                                </td>
+                                <td class="small"
+                                    th:text="${r.sourceId == null} ? '全部日志源' : (${sourceNames[r.sourceId]} ?: ('#' + ${r.sourceId}))"></td>
+                                <td class="text-nowrap" th:text="'≥ ' + ${r.threshold} + ' / ' + ${r.windowMinutes} + ' 分钟'"></td>
+                                <td class="text-nowrap" th:text="${r.cooldownMinutes} + ' 分钟'"></td>
+                                <td class="small">
+                                    <span class="badge bg-info" th:if="${r.channelId != null}"
+                                          th:text="'渠道#' + ${r.channelId}"></span>
+                                    <span th:if="${r.webhookUrl}" class="badge bg-dark">Webhook</span>
+                                    <span th:if="${r.emailTo}" class="badge bg-dark">邮件</span>
+                                    <span th:if="${r.webhookUrl == null and r.emailTo == null and r.channelId == null}"
+                                          class="text-muted">仅记录</span>
+                                </td>
+                                <td class="num" th:text="${r.triggerCount}"></td>
+                                <td class="small text-nowrap" th:if="${r.lastTriggerAt}"
+                                    th:text="${#temporals.format(r.lastTriggerAt, 'MM-dd HH:mm')}"></td>
+                                <td class="small text-muted" th:unless="${r.lastTriggerAt}">—</td>
+                                <td>
+                                    <span class="badge" th:classappend="${r.enabled} ? 'bg-success' : 'bg-secondary'"
+                                          th:text="${r.enabled} ? '启用' : '停用'"></span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" th:onclick="'lpEditAlert(' + ${r.id} + ')'">编辑</button>
+                                    <form class="d-inline" method="post" th:action="@{'/alerts/' + ${r.id} + '/toggle'}">
+                                        <button class="btn btn-sm btn-outline-warning" th:text="${r.enabled} ? '停用' : '启用'"></button>
+                                    </form>
+                                    <form class="d-inline" method="post" th:action="@{'/' + 'alerts/' + ${r.id} + '/delete'}"
+                                          onsubmit="return lpConfirm(this, '确认删除该告警规则？')">
+                                        <button class="btn btn-sm btn-outline-danger">删除</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="mt-4 mb-2">触发记录</h6>
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead><tr><th>时间</th><th>规则</th><th>标题</th><th>渠道</th><th>状态</th><th>详情</th></tr></thead>
+                            <tbody>
+                            <tr th:if="${#lists.isEmpty(records)}"><td colspan="6" class="text-muted text-center py-4">暂无触发记录</td></tr>
+                            <tr th:each="rec : ${records}">
+                                <td class="text-nowrap small" th:text="${#temporals.format(rec.createdAt, 'MM-dd HH:mm:ss')}"></td>
+                                <td th:text="${rec.ruleName}"></td>
+                                <td class="small text-truncate" style="max-width:320px" th:title="${rec.content}"
+                                    th:text="${rec.title}"></td>
+                                <td><span class="badge bg-dark" th:text="${rec.channel}"></span></td>
+                                <td>
+                                    <span class="badge" th:classappend="${rec.status=='OK'} ? 'bg-success' : 'bg-danger'"
+                                          th:text="${rec.status}"></span>
+                                </td>
+                                <td class="small text-muted text-truncate" style="max-width:220px" th:title="${rec.detail}"
+                                    th:text="${rec.detail}"></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通知渠道 -->
+        <div class="tab-pane fade" id="tab-channels">
+            <div class="d-flex justify-content-end mb-2">
+                <button class="btn btn-primary btn-sm" onclick="lpEditChannel(null)">+ 添加渠道</button>
+            </div>
+            <div class="card">
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>名称</th><th>类型</th><th>地址 / 收件人</th><th>备注</th><th>状态</th><th style="width:190px">操作</th></tr></thead>
+                        <tbody>
+                        <tr th:if="${#lists.isEmpty(channels)}">
+                            <td colspan="6" class="text-muted text-center py-4">暂无通知渠道。渠道是地址字典：告警规则引用它，改地址只改一处。</td>
+                        </tr>
+                        <tr th:each="c : ${channels}">
+                            <td th:text="${c.name}"></td>
+                            <td><span class="badge" th:classappend="${c.type=='EMAIL'} ? 'bg-info' : 'bg-dark'"
+                                      th:text="${c.type}"></span></td>
+                            <td class="mono small text-truncate" style="max-width:380px" th:title="${c.target}"
+                                th:text="${c.target}"></td>
+                            <td class="small text-muted" th:text="${c.remark}"></td>
+                            <td>
+                                <span class="badge" th:classappend="${c.enabled} ? 'bg-success' : 'bg-secondary'"
+                                      th:text="${c.enabled} ? '启用' : '停用'"></span>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-success"
+                                        th:onclick="'lpAction(this, \'/channels/' + ${c.id} + '/test\')'">测试</button>
+                                <button class="btn btn-sm btn-outline-primary" th:onclick="'lpEditChannel(' + ${c.id} + ')'">编辑</button>
+                                <form class="d-inline" method="post" th:action="@{'/channels/' + ${c.id} + '/toggle'}">
+                                    <button class="btn btn-sm btn-outline-warning" th:text="${c.enabled} ? '停用' : '启用'"></button>
+                                </form>
+                                <form class="d-inline" method="post" th:action="@{'/channels/' + ${c.id} + '/delete'}"
+                                      onsubmit="return lpConfirm(this, '确认删除该渠道？引用它的告警规则将退回仅记录模式。')">
+                                    <button class="btn btn-sm btn-outline-danger">删除</button>
+                                </form>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 静默窗口 -->
+        <div class="tab-pane fade" id="tab-silence">
+            <div class="d-flex justify-content-end mb-2">
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#silenceModal">+ 新建静默</button>
+            </div>
+            <div class="card">
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>目标</th><th>原因</th><th>静默至</th><th>剩余</th><th>状态</th><th style="width:170px">操作</th></tr></thead>
+                        <tbody>
+                        <tr th:if="${#lists.isEmpty(silences)}">
+                            <td colspan="6" class="text-muted text-center py-4">
+                                暂无静默。计划内发布或处理已知故障时创建静默，避免告警轰炸。
+                            </td>
+                        </tr>
+                        <tr th:each="s : ${silences}">
+                            <td>
+                                <span th:text="${silenceNames[s.id]}"></span>
+                                <span class="badge bg-dark ms-1" th:text="${s.isSourceSilence()} ? '日志源' : '异常组'"></span>
+                            </td>
+                            <td class="small" th:text="${s.reason}"></td>
+                            <td class="small text-nowrap" th:text="${#temporals.format(s.untilAt, 'MM-dd HH:mm:ss')}"></td>
+                            <td class="small" th:if="${s.isActive()}"
+                                th:text="'≈' + ${s.remainingMinutes} + ' 分钟'"></td>
+                            <td class="small text-muted" th:unless="${s.isActive()}">—</td>
+                            <td>
+                                <span class="badge" th:classappend="${s.isActive()} ? 'bg-warning' : 'bg-secondary'"
+                                      th:text="${s.isActive()} ? '静默中' : '已结束'"></span>
+                            </td>
+                            <td>
+                                <form class="d-inline" method="post" th:action="@{'/silence/' + ${s.id} + '/end'}" th:if="${s.isActive()}">
+                                    <button class="btn btn-sm btn-outline-warning">提前结束</button>
+                                </form>
+                                <form class="d-inline" method="post" th:action="@{'/silence/' + ${s.id} + '/delete'}"
+                                      onsubmit="return lpConfirm(this, '删除该静默记录？')">
+                                    <button class="btn btn-sm btn-outline-danger">删除</button>
+                                </form>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 告警规则编辑弹窗 -->
+<div class="modal fade" id="alertModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" th:action="@{/alerts/save}">
+                <div class="modal-header">
+                    <h5 class="modal-title">告警规则</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="a-id">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">规则名称 *</label>
+                            <input class="form-control" name="name" id="a-name" required placeholder="如 异常激增告警">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">指标</label>
+                            <select class="form-select" name="metric" id="a-metric">
+                                <option value="EVENT_COUNT">窗口内异常事件数</option>
+                                <option value="NEW_GROUP">窗口内新增异常类型</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">日志源范围</label>
+                            <select class="form-select" name="sourceId" id="a-sourceId">
+                                <option value="">全部日志源</option>
+                                <option th:each="s : ${sources}" th:value="${s.id}" th:text="${s.name}"></option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">阈值</label>
+                            <input class="form-control" name="threshold" id="a-threshold" type="number" value="50" min="1">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">窗口(分钟)</label>
+                            <input class="form-control" name="windowMinutes" id="a-window" type="number" value="30" min="1">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">冷却(分钟)</label>
+                            <input class="form-control" name="cooldownMinutes" id="a-cooldown" type="number" value="60" min="1">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">通知渠道（推荐：统一维护地址）</label>
+                            <select class="form-select" name="channelId" id="a-channelId">
+                                <option value="">不引用</option>
+                                <option th:each="c : ${channels}" th:value="${c.id}"
+                                        th:text="${c.name} + '（' + ${c.type} + '）'"></option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">备用直填：Webhook 地址</label>
+                            <input class="form-control mono" name="webhookUrl" id="a-webhook"
+                                   placeholder="留空；对接企业微信/钉钉/飞书机器人网关">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">备用直填：邮件接收人</label>
+                            <input class="form-control" name="emailTo" id="a-email" placeholder="留空">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 通知渠道编辑弹窗 -->
+<div class="modal fade" id="channelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" th:action="@{/channels/save}">
+                <div class="modal-header">
+                    <h5 class="modal-title">通知渠道</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="c-id">
+                    <div class="row g-3">
+                        <div class="col-8">
+                            <label class="form-label">名称 *</label>
+                            <input class="form-control" name="name" id="c-name" required placeholder="如 运维群机器人">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">类型</label>
+                            <select class="form-select" name="type" id="c-type">
+                                <option value="WEBHOOK">Webhook</option>
+                                <option value="EMAIL">EMAIL 邮件</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Webhook 地址 / 邮件收件人 *</label>
+                            <input class="form-control mono" name="target" id="c-target" required
+                                   placeholder="http://... 或 ops@company.com,dev@company.com">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">备注</label>
+                            <input class="form-control" name="remark" id="c-remark">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 静默创建弹窗 -->
+<div class="modal fade" id="silenceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" th:action="@{/silence/save}">
+                <div class="modal-header">
+                    <h5 class="modal-title">新建静默窗口</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">静默目标</label>
+                            <div class="d-flex gap-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="targetType" value="SOURCE" id="st-source" checked>
+                                    <label class="form-check-label" for="st-source">日志源</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="targetType" value="GROUP" id="st-group">
+                                    <label class="form-check-label" for="st-group">异常组（填组 ID）</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12" id="silence-source-row">
+                            <label class="form-label">日志源</label>
+                            <select class="form-select" name="sourceId" id="silence-sourceId">
+                                <option th:each="s : ${sources}" th:value="${s.id}" th:text="${s.name}"></option>
+                            </select>
+                        </div>
+                        <div class="col-12 d-none" id="silence-group-row">
+                            <label class="form-label">异常组 ID</label>
+                            <input class="form-control num" name="groupId" type="number" placeholder="见异常分析列表第一列">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">时长（分钟）</label>
+                            <select class="form-select" name="minutes">
+                                <option value="60">1 小时</option>
+                                <option value="120">2 小时</option>
+                                <option value="240">4 小时</option>
+                                <option value="480">8 小时</option>
+                                <option value="1440">24 小时</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">原因</label>
+                            <input class="form-control" name="reason" placeholder="如：v2.3.0 发布窗口">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary">创建</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 测试邮件弹窗 -->
+<div class="modal fade" id="testMailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">发送测试邮件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input class="form-control" id="test-mail-to" placeholder="接收邮箱">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="lpTestMail(this)">发送</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+<script>
+    const alertRules = /*[[${rules}]]*/ [];
+    const channelsData = /*[[${channels}]]*/ [];
+    function lpEditAlert(id) {
+        const r = alertRules.find(x => x.id === id);
+        document.getElementById('a-id').value = id || '';
+        document.getElementById('a-name').value = r ? r.name : '';
+        document.getElementById('a-metric').value = r ? r.metric : 'EVENT_COUNT';
+        document.getElementById('a-sourceId').value = r && r.sourceId ? r.sourceId : '';
+        document.getElementById('a-threshold').value = r ? r.threshold : 50;
+        document.getElementById('a-window').value = r ? r.windowMinutes : 30;
+        document.getElementById('a-cooldown').value = r ? r.cooldownMinutes : 60;
+        document.getElementById('a-channelId').value = r && r.channelId ? r.channelId : '';
+        document.getElementById('a-webhook').value = r ? (r.webhookUrl || '') : '';
+        document.getElementById('a-email').value = r ? (r.emailTo || '') : '';
+        new bootstrap.Modal(document.getElementById('alertModal')).show();
+    }
+    function lpEditChannel(id) {
+        const c = channelsData.find(x => x.id === id);
+        document.getElementById('c-id').value = id || '';
+        document.getElementById('c-name').value = c ? c.name : '';
+        document.getElementById('c-type').value = c ? c.type : 'WEBHOOK';
+        document.getElementById('c-target').value = c ? c.target : '';
+        document.getElementById('c-remark').value = c ? (c.remark || '') : '';
+        new bootstrap.Modal(document.getElementById('channelModal')).show();
+    }
+    document.querySelectorAll('input[name="targetType"]').forEach(el => el.addEventListener('change', () => {
+        const isGroup = document.getElementById('st-group').checked;
+        document.getElementById('silence-source-row').classList.toggle('d-none', isGroup);
+        document.getElementById('silence-group-row').classList.toggle('d-none', !isGroup);
+    }));
+    function lpTestMail(btn) {
+        const to = document.getElementById('test-mail-to').value.trim();
+        if (!to) { lpToast('请输入接收邮箱', 'warning'); return; }
+        lpAction(btn, '/alerts/test-mail?to=' + encodeURIComponent(to));
+    }
+</script>
+</body>
+</html>

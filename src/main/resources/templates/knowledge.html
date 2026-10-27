@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('知识库')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('knowledge')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center my-3">
+        <h5 class="mb-0">异常知识库 <span class="text-muted small">（正则匹配异常文本，自动给出原因与修复方案）</span></h5>
+        <button class="btn btn-primary" onclick="lpEditRule(null)">+ 添加规则</button>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                    <tr><th>规则</th><th>级别</th><th>匹配正则</th><th>原因分析</th><th>修复建议</th>
+                        <th>命中</th><th>状态</th><th style="width:150px">操作</th></tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="r : ${rules}">
+                        <td>
+                            <span th:text="${r.name}"></span>
+                            <span th:if="${r.builtin}" class="badge bg-dark ms-1">内置</span>
+                        </td>
+                        <td><span class="badge" th:classappend="${'badge-sev-' + r.severity}" th:text="${r.severity}"></span></td>
+                        <td class="mono small text-truncate" style="max-width:180px" th:title="${r.pattern}"
+                            th:text="${r.pattern}"></td>
+                        <td class="small text-truncate" style="max-width:220px" th:title="${r.cause}"
+                            th:text="${r.cause}"></td>
+                        <td class="small text-truncate" style="max-width:260px" th:title="${r.suggestion}"
+                            th:text="${r.suggestion}"></td>
+                        <td th:text="${r.hitCount}"></td>
+                        <td>
+                            <span class="badge" th:classappend="${r.enabled} ? 'bg-success' : 'bg-secondary'"
+                                  th:text="${r.enabled} ? '启用' : '停用'"></span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" th:onclick="'lpEditRule(' + ${r.id} + ')'">编辑</button>
+                            <form class="d-inline" method="post" th:action="@{'/knowledge/' + ${r.id} + '/toggle'}">
+                                <button class="btn btn-sm btn-outline-warning" th:text="${r.enabled} ? '停用' : '启用'"></button>
+                            </form>
+                            <form class="d-inline" method="post" th:action="@{'/knowledge/' + ${r.id} + '/delete'}"
+                                  onsubmit="return lpConfirm(this, '确认删除该规则？')">
+                                <button class="btn btn-sm btn-outline-danger">删除</button>
+                            </form>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 规则编辑弹窗 -->
+<div class="modal fade" id="ruleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" th:action="@{/knowledge/save}">
+                <div class="modal-header">
+                    <h5 class="modal-title">知识库规则</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="k-id">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label">规则名称 *</label>
+                            <input class="form-control" name="name" id="k-name" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">严重级别</label>
+                            <select class="form-select" name="severity" id="k-severity">
+                                <option value="HIGH">HIGH 高</option>
+                                <option value="MID" selected>MID 中</option>
+                                <option value="LOW">LOW 低</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">匹配正则 *（作用于 异常类+消息+堆栈 组合文本）</label>
+                            <input class="form-control mono" name="pattern" id="k-pattern" required
+                                   placeholder="如 NullPointerException|IllegalStateException">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">原因分析</label>
+                            <textarea class="form-control" name="cause" id="k-cause" rows="3"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">修复建议</label>
+                            <textarea class="form-control" name="suggestion" id="k-suggestion" rows="6"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+<script>
+    const rulesData = /*[[${rules}]]*/ [];
+    function lpEditRule(id) {
+        const r = rulesData.find(x => x.id === id);
+        document.getElementById('k-id').value = id || '';
+        document.getElementById('k-name').value = r ? r.name : '';
+        document.getElementById('k-severity').value = r ? r.severity : 'MID';
+        document.getElementById('k-pattern').value = r ? r.pattern : '';
+        document.getElementById('k-cause').value = r ? r.cause : '';
+        document.getElementById('k-suggestion').value = r ? r.suggestion : '';
+        new bootstrap.Modal(document.getElementById('ruleModal')).show();
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('异常分析')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('errors')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 my-3">
+        <h5 class="mb-0">异常分析 <span class="text-muted small">（同类异常自动聚合，按指纹去重）</span></h5>
+        <button class="btn btn-outline-primary btn-sm" onclick="lpAction(this, '/errors/ai-batch', {reloadDelay: 4})">
+            🤖 批量 AI 分析待处理异常
+        </button>
+    </div>
+
+    <ul class="nav nav-pills mb-2">
+        <li class="nav-item">
+            <a class="nav-link" th:classappend="${status=='OPEN'}?'active':''"
+               th:href="@{/errors(status='OPEN', q=${q}, assignee=${assignee}, tag=${tag})}">待处理 <span class="badge bg-danger" th:text="${countOpen}"></span></a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" th:classappend="${status=='ANALYZED'}?'active':''"
+               th:href="@{/errors(status='ANALYZED', q=${q}, assignee=${assignee}, tag=${tag})}">已分析 <span class="badge bg-primary" th:text="${countAnalyzed}"></span></a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" th:classappend="${status=='RESOLVED'}?'active':''"
+               th:href="@{/errors(status='RESOLVED', q=${q}, assignee=${assignee}, tag=${tag})}">已修复 <span class="badge bg-success" th:text="${countResolved}"></span></a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" th:classappend="${status=='IGNORED'}?'active':''"
+               th:href="@{/errors(status='IGNORED', q=${q}, assignee=${assignee}, tag=${tag})}">已忽略 <span class="badge bg-secondary" th:text="${countIgnored}"></span></a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" th:classappend="${status=='ALL'}?'active':''"
+               th:href="@{/errors(status='ALL', q=${q}, assignee=${assignee}, tag=${tag})}">全部</a>
+        </li>
+    </ul>
+
+    <form class="row g-2 mb-2" method="get" th:action="@{/errors}">
+        <input type="hidden" name="status" th:value="${status}">
+        <div class="col-md-4">
+            <input class="form-control" name="q" th:value="${q}" placeholder="搜索异常类 / 消息 / 代码位置">
+        </div>
+        <div class="col-md-2">
+            <input class="form-control" name="assignee" th:value="${assignee}" list="assignee-list" placeholder="处理人">
+            <datalist id="assignee-list">
+                <option th:each="a : ${assignees}" th:value="${a}"></option>
+            </datalist>
+        </div>
+        <div class="col-md-2">
+            <input class="form-control" name="tag" th:value="${tag}" placeholder="标签，如 数据库">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary">筛选</button>
+        </div>
+        <div class="col-auto">
+            <a class="btn btn-outline-secondary" th:href="@{/errors/export(status=${status}, q=${q}, assignee=${assignee}, tag=${tag})}"
+               title="导出当前筛选结果为 CSV">导出 CSV</a>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                    <tr>
+                        <th>ID</th><th>级别</th><th>异常类</th><th>消息模板</th><th>代码位置</th>
+                        <th>知识库初判</th><th>AI</th><th>次数</th><th>最近出现</th><th>状态</th><th>处理人/标签</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:if="${#lists.isEmpty(groups)}">
+                        <td colspan="11" class="text-muted text-center py-5">当前筛选下没有异常组 🎉</td>
+                    </tr>
+                    <tr class="cursor-pointer" th:each="g : ${groups}"
+                        th:onclick="'location.href=\'/errors/' + ${g.id} + '\''">
+                        <td th:text="${g.id}"></td>
+                        <td><span class="badge bg-danger" th:text="${g.level}"></span></td>
+                        <td class="mono" th:text="${g.exceptionClass ?: 'GeneralError'}"></td>
+                        <td style="max-width:300px"><span class="d-inline-block text-truncate" style="max-width:290px"
+                              th:title="${g.template}" th:text="${g.template}"></span></td>
+                        <td class="mono small" th:text="${g.topFrame}"></td>
+                        <td>
+                            <span th:if="${g.knowledgeName}" class="badge"
+                                  th:classappend="${'badge-sev-' + (g.severity ?: 'MID')}"
+                                  th:title="${g.suggestion}" th:text="${g.knowledgeName}"></span>
+                        </td>
+                        <td>
+                            <span th:if="${g.aiAnalyzed}" class="badge bg-info">已分析</span>
+                            <span th:unless="${g.aiAnalyzed}" class="text-muted small">—</span>
+                        </td>
+                        <td><span class="badge bg-danger" th:text="${g.totalCount}"></span></td>
+                        <td class="text-nowrap small" th:text="${#temporals.format(g.lastSeen, 'MM-dd HH:mm')}"></td>
+                        <td><span class="badge" th:classappend="${'badge-st-' + g.status}" th:text="${g.status}"></span></td>
+                        <td class="small">
+                            <span th:if="${g.assignee}" class="badge bg-dark" th:text="${g.assignee}"></span>
+                            <span class="text-muted small" th:if="${g.tags}" th:text="${g.tags}"></span>
+                            <span th:if="${g.assignee == null and (g.tags == null or g.tags == '')}"
+                                  class="text-muted small">—</span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分页 -->
+    <nav th:if="${page.totalPages > 1}" class="mt-3">
+        <ul class="pagination pagination-sm">
+            <li class="page-item" th:classappend="${page.first} ? 'disabled'">
+                <a class="page-link" th:href="@{/errors(status=${status}, q=${q}, assignee=${assignee}, tag=${tag}, page=${page.number - 1})}">上一页</a>
+            </li>
+            <li class="page-item disabled"><span class="page-link"
+                 th:text="${page.number + 1} + ' / ' + ${page.totalPages}"></span></li>
+            <li class="page-item" th:classappend="${page.last} ? 'disabled'">
+                <a class="page-link" th:href="@{/errors(status=${status}, q=${q}, assignee=${assignee}, tag=${tag}, page=${page.number + 1})}">下一页</a>
+            </li>
+        </ul>
+    </nav>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' - LogPilot'">LogPilot</title>
+    <link rel="stylesheet" th:href="@{/vendor/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/css/logpilot.css(v='dark1')}">
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<nav th:fragment="nav(active)" class="navbar navbar-expand navbar-dark lp-nav sticky-top">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold d-flex align-items-center" th:href="@{/}">
+            <span class="lp-logo">◈</span>
+            <span class="ms-2">LogPilot</span>
+            <span class="lp-sub">LOG · PILOT</span>
+        </a>
+        <ul class="navbar-nav me-auto">
+            <li class="nav-item" th:classappend="${active=='dashboard'}?'active':''">
+                <a class="nav-link" th:href="@{/}">仪表盘</a></li>
+            <li class="nav-item" th:classappend="${active=='servers'}?'active':''">
+                <a class="nav-link" th:href="@{/servers}">服务器</a></li>
+            <li class="nav-item" th:classappend="${active=='sources'}?'active':''">
+                <a class="nav-link" th:href="@{/sources}">日志源</a></li>
+            <li class="nav-item" th:classappend="${active=='search'}?'active':''">
+                <a class="nav-link" th:href="@{/search}">日志检索</a></li>
+            <li class="nav-item" th:classappend="${active=='errors'}?'active':''">
+                <a class="nav-link" th:href="@{/errors}">异常分析</a></li>
+            <li class="nav-item" th:classappend="${active=='events'}?'active':''">
+                <a class="nav-link" th:href="@{/events}">异常事件</a></li>
+            <li class="nav-item" th:classappend="${active=='knowledge'}?'active':''">
+                <a class="nav-link" th:href="@{/knowledge}">知识库</a></li>
+            <li class="nav-item" th:classappend="${active=='alerts'}?'active':''">
+                <a class="nav-link" th:href="@{/alerts}">告警</a></li>
+            <li class="nav-item" th:classappend="${active=='health'}?'active':''">
+                <a class="nav-link" th:href="@{/health}">系统健康</a></li>
+            <li class="nav-item" th:classappend="${active=='reports'}?'active':''">
+                <a class="nav-link" th:href="@{/reports}">报告</a></li>
+            <li class="nav-item" th:classappend="${active=='settings'}?'active':''">
+                <a class="nav-link" th:href="@{/settings}">系统设置</a></li>
+        </ul>
+        <span class="navbar-text small d-none d-xl-inline">通过日志 · 持续修复系统缺陷</span>
+    </div>
+</nav>
+
+<!-- 消息提示 -->
+<div th:fragment="msg">
+    <div class="container-fluid lp-container">
+        <div th:if="${msg}" class="alert alert-success alert-dismissible fade show mt-2" role="alert">
+            <span th:text="${msg}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        <div th:if="${error}" class="alert alert-danger alert-dismissible fade show mt-2" role="alert">
+            <span th:text="${error}"></span>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+</div>
+
+<!-- 页脚 -->
+<footer th:fragment="footer" class="lp-footer text-muted small">
+    LogPilot v1.0 · 内网日志采集与智能分析平台 ·
+    <a class="text-reset" th:href="@{/api/health}" target="_blank">健康检查</a> ·
+    <a class="text-reset" th:href="@{/h2-console}" target="_blank">H2 控制台</a>
+</footer>
+
+<script th:fragment="scripts" th:src="@{/vendor/js/bootstrap.bundle.min.js}"></script>
+<script th:fragment="scripts2" th:src="@{/js/logpilot.js}"></script>
+
+</body>
+</html>

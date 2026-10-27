@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('异常详情')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('errors')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 my-3">
+        <div>
+            <h5 class="mb-1">
+                <span class="badge" th:classappend="${'badge-st-' + group.status}" th:text="${group.status}"></span>
+                <span class="mono" th:text="${group.exceptionClass ?: 'GeneralError'}"></span>
+                <span th:if="${group.knowledgeName}" class="badge ms-2"
+                      th:classappend="${'badge-sev-' + (group.severity ?: 'MID')}"
+                      th:text="${group.knowledgeName}"></span>
+                <span th:if="${group.assignee}" class="badge bg-dark ms-1"
+                      th:text="'👤 ' + ${group.assignee}"></span>
+                <span th:if="${group.tags}" class="text-muted small ms-1" th:text="'🏷 ' + ${group.tags}"></span>
+                <span th:if="${silencedUntil}" class="badge bg-warning ms-1"
+                      th:title="'静默至 ' + ${#temporals.format(silencedUntil, 'MM-dd HH:mm')}">🔕 静默中</span>
+            </h5>
+            <div class="text-muted small">
+                首次出现 <span th:text="${#temporals.format(group.firstSeen, 'yyyy-MM-dd HH:mm:ss')}"></span> ·
+                最近出现 <span th:text="${#temporals.format(group.lastSeen, 'yyyy-MM-dd HH:mm:ss')}"></span> ·
+                累计 <b class="text-danger" th:text="${group.totalCount}"></b> 次 ·
+                涉及日志源 <span th:text="${#lists.size(#strings.listSplit(group.sourceIds, ','))}"></span> 个
+                <span th:if="${group.aiModel}">· AI 模型 <span class="mono" th:text="${group.aiModel}"></span></span>
+            </div>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" th:href="@{/errors}">← 返回列表</a>
+    </div>
+
+    <div class="row g-3">
+        <!-- 左列：消息与堆栈、事件列表 -->
+        <div class="col-lg-7">
+            <div class="card mb-3">
+                <div class="card-header">异常消息模板（已脱敏归一化）</div>
+                <div class="card-body">
+                    <div class="mono" th:text="${group.template}"></div>
+                    <div class="mt-2 small" th:if="${group.topFrame}">
+                        <span class="text-muted">业务代码位置：</span>
+                        <span class="mono text-primary" th:text="${group.topFrame}"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3" th:if="${group.aiAnalysis}">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>🤖 AI 根因分析与修复方案</span>
+                    <span class="text-muted small"
+                          th:if="${group.aiAnalyzedAt}"
+                          th:text="${#temporals.format(group.aiAnalyzedAt, 'yyyy-MM-dd HH:mm')}"></span>
+                </div>
+                <div class="card-body md-content" id="ai-md" th:data-md="${group.aiAnalysis}"></div>
+            </div>
+            <div class="card mb-3" id="ai-result" style="display:none">
+                <div class="card-header">🤖 AI 分析中...</div>
+                <div class="card-body md-content"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between">
+                    <span>出现记录（共 <span th:text="${totalEvents}"></span> 条，展示最近 200 条）</span>
+                    <a class="small" th:href="@{'/errors/' + ${group.id} + '/export'}">导出 CSV ›</a>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>时间</th><th>日志源</th><th>文件</th><th>消息</th><th></th></tr></thead>
+                        <tbody>
+                        <tr th:each="e : ${events}">
+                            <td class="text-nowrap small" th:text="${#temporals.format(e.occurredAt, 'MM-dd HH:mm:ss')}"></td>
+                            <td class="small" th:text="${sourceNames[e.sourceId] ?: e.sourceId}"></td>
+                            <td class="mono small text-truncate" style="max-width:160px" th:title="${e.filePath}"
+                                th:text="${e.filePath}"></td>
+                            <td class="small text-truncate" style="max-width:220px" th:title="${e.message}"
+                                th:text="${e.message}"></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
+                                        th:attr="data-bs-target='#raw-' + ${e.id}">原始日志</button>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="collapse mt-2" th:each="e : ${events}" th:attr="id='raw-' + ${e.id}">
+                <div class="card card-body">
+                    <pre class="pre-wrap mb-0" th:text="${e.raw}"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右列：修复方案与闭环 -->
+        <div class="col-lg-5">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>🤖 AI 分析</span>
+                    <span class="badge" th:classappend="${aiEnabled} ? 'bg-success' : 'bg-secondary'"
+                          th:text="${aiEnabled} ? '已启用' : '未启用'"></span>
+                </div>
+                <div class="card-body">
+                    <div th:if="${!aiEnabled}" class="text-muted small mb-2">
+                        未接入 AI：可在<a th:href="@{/settings}">系统设置</a>中配置 OpenAI 兼容接口（OpenAI / 智谱 GLM / DeepSeek / Ollama 等）。
+                    </div>
+                    <button class="btn btn-primary w-100" th:disabled="${!aiEnabled}"
+                            th:onclick="'lpAiAnalyze(this, ' + ${group.id} + ')'">🤖 AI 根因分析</button>
+                    <div class="form-text mt-1">将最近一次原始日志发送给大模型，生成根因分析与修复方案</div>
+                </div>
+            </div>
+
+            <div class="card mb-3" th:if="${group.suggestion}">
+                <div class="card-header">📚 内置知识库修复建议
+                    <span class="text-muted small" th:if="${group.knowledgeName}"
+                          th:text="' · ' + ${group.knowledgeName}"></span>
+                </div>
+                <div class="card-body pre-wrap"
+                     th:text="${group.suggestion}"></div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">🔧 修复闭环</div>
+                <div class="card-body">
+                    <form method="post" th:action="@{'/errors/' + ${group.id} + '/status'}">
+                        <div class="mb-3">
+                            <label class="form-label">处理状态</label>
+                            <select class="form-select" name="status">
+                                <option value="OPEN" th:selected="${group.status=='OPEN'}">待处理</option>
+                                <option value="ANALYZED" th:selected="${group.status=='ANALYZED'}">已分析 / 处理中</option>
+                                <option value="RESOLVED" th:selected="${group.status=='RESOLVED'}">已修复</option>
+                                <option value="IGNORED" th:selected="${group.status=='IGNORED'}">已忽略（无需修复）</option>
+                            </select>
+                        </div>
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label">处理人</label>
+                                <input class="form-control" name="assignee" th:value="${group.assignee}"
+                                       list="detail-assignee-list" placeholder="如 张三">
+                                <datalist id="detail-assignee-list">
+                                    <option th:each="a : ${assignees}" th:value="${a}"></option>
+                                </datalist>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">标签（逗号分隔）</label>
+                                <input class="form-control" name="tags" th:value="${group.tags}" placeholder="数据库,支付链路">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">修复说明 / 处理记录</label>
+                            <textarea class="form-control" name="fixNote" rows="4"
+                                      th:placeholder="'如：修复 OrderService.applyVipDiscount 空指针，PR #1024'"
+                              th:text="${group.fixNote}"></textarea>
+                        </div>
+                        <button class="btn btn-primary w-100">保存处理结果</button>
+                    </form>
+                    <div class="mt-2 small text-muted" th:if="${group.fixedAt}">
+                        最后修复时间：<span th:text="${#temporals.format(group.fixedAt, 'yyyy-MM-dd HH:mm')}"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">🔕 告警静默</div>
+                <div class="card-body">
+                    <div th:if="${silencedUntil}" class="mb-2 small">
+                        <span class="badge bg-warning">静默中</span>
+                        至 <span class="mono" th:text="${#temporals.format(silencedUntil, 'yyyy-MM-dd HH:mm:ss')}"></span>
+                        （告警页可提前结束）
+                    </div>
+                    <form method="post" th:action="@{/silence/save}" class="row g-2 align-items-end" th:unless="${silencedUntil}">
+                        <input type="hidden" name="targetType" value="GROUP">
+                        <input type="hidden" name="groupId" th:value="${group.id}">
+                        <div class="col-6">
+                            <label class="form-label">静默时长</label>
+                            <select class="form-select" name="minutes">
+                                <option value="60">1 小时</option>
+                                <option value="240">4 小时</option>
+                                <option value="480">8 小时</option>
+                                <option value="1440">24 小时</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">原因</label>
+                            <input class="form-control" name="reason" placeholder="如：修复中">
+                        </div>
+                        <div class="col-12">
+                            <button class="btn btn-outline-warning w-100">静默该异常的告警</button>
+                        </div>
+                    </form>
+                    <div class="form-text">静默期间该异常组不再触发告警，适合修复验证期</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">指纹信息</div>
+                <div class="card-body mono small">
+                    <div class="text-break" th:text="'fingerprint: ' + ${group.fingerprint}"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+<script>
+    const aiMd = document.getElementById('ai-md');
+    if (aiMd && aiMd.dataset.md) {
+        aiMd.innerHTML = lpRenderMarkdown(aiMd.dataset.md);
+    }
+</script>
+</body>
+</html>

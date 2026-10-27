@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('日志检索')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('search')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <h5 class="my-3">日志检索 <span class="text-muted small">（在原始日志文件中全文搜索，带上下文）</span></h5>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form class="row g-2 align-items-end" method="get" th:action="@{/search}">
+                <div class="col-md-3">
+                    <label class="form-label">日志源</label>
+                    <select class="form-select" name="sourceId" required>
+                        <option value="" th:selected="${sourceId == null}">选择日志源…</option>
+                        <option th:each="s : ${sources}" th:value="${s.id}" th:text="${s.name}"
+                                th:selected="${sourceId != null && sourceId == s.id}"></option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">关键字</label>
+                    <input class="form-control mono" name="q" th:value="${q}" placeholder="如 Connection refused" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">上下文行数</label>
+                    <input class="form-control num" type="number" name="ctx" th:value="${ctx}" min="0" max="10">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">最大命中数</label>
+                    <input class="form-control num" type="number" name="max" th:value="${max}" min="1" max="200">
+                </div>
+                <div class="col-md-2 d-flex gap-3 align-items-center">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="ignoreCase" id="ic" th:checked="${ignoreCase}">
+                        <label class="form-check-label" for="ic">忽略大小写</label>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">开始时间（可选）</label>
+                    <input class="form-control" type="datetime-local" name="from" step="1">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">结束时间（可选）</label>
+                    <input class="form-control" type="datetime-local" name="to" step="1">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-primary w-100">搜索</button>
+                </div>
+            </form>
+            <div class="form-text mt-2">提示：单文件最多读取 32MB（超出部分忽略，日志文件通常已轮转）；时间过滤要求日志行含标准时间戳。</div>
+        </div>
+    </div>
+
+    <div th:if="${error}" class="alert alert-danger" th:text="${error}"></div>
+
+    <div th:if="${searched}" class="card">
+        <div class="card-header d-flex justify-content-between">
+            <span>检索结果
+                <span class="text-muted small" th:if="${result != null}"
+                      th:text="' · 扫描 ' + ${result.filesScanned} + ' 个文件 / ' + ${#numbers.formatDecimal(result.bytesScanned / 1048576, 1, 1)} + ' MB · 命中 ' + ${result.hits.size()} + ' 处'"></span>
+            </span>
+            <span class="small">
+                <span class="badge bg-warning" th:if="${result != null and result.fileTruncated}">部分文件超限截断</span>
+                <span class="badge bg-warning" th:if="${result != null and result.hitTruncated}">已达最大命中数</span>
+            </span>
+        </div>
+        <div class="card-body" th:if="${result != null}">
+            <div th:if="${result.hits.isEmpty()}" class="text-muted text-center py-4">没有命中，试试更短的关键字或忽略大小写</div>
+            <div th:each="hit : ${result.hits}" class="mb-3">
+                <div class="small text-muted mb-1 mono">
+                    <span th:text="${hit.filePath}"></span>
+                    <span class="text-primary">:<span th:text="${hit.lineNo}"></span></span>
+                    <span th:if="${hit.ts != null}" th:text="' @ ' + ${#temporals.format(hit.ts, 'MM-dd HH:mm:ss')}"></span>
+                </div>
+                <pre class="pre-wrap mb-0 lp-search-block"><code><th:block th:each="b : ${hit.before}"><span class="lp-search-ctx" th:text="${b}"></span>
+</th:block><span th:utext="${hit.matchHtml}"></span><th:block th:each="a : ${hit.after}">
+<span class="lp-search-ctx" th:text="${a}"></span>
+</th:block></code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+</body>
+</html>

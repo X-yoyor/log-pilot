@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('出错了')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('')}"></nav>
+<div class="container-fluid lp-container">
+    <div class="card mt-4">
+        <div class="card-body text-center py-5">
+            <h3>:( 出错了</h3>
+            <p class="text-muted mono" th:text="${message}">未知错误</p>
+            <a class="btn btn-primary" th:href="@{/}">返回首页</a>
+        </div>
+    </div>
+</div>
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+</body>
+</html>

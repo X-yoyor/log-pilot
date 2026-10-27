@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('服务器管理')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('servers')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center my-3">
+        <h5 class="mb-0">服务器管理</h5>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#serverModal"
+                onclick="lpEditServer(null)">+ 添加服务器</button>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+                <thead>
+                <tr>
+                    <th>ID</th><th>名称</th><th>类型</th><th>地址</th><th>认证</th>
+                    <th>连通状态</th><th>备注</th><th style="width:220px">操作</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr th:if="${#lists.isEmpty(servers)}">
+                    <td colspan="8" class="text-muted text-center py-5">
+                        暂无服务器。添加内网服务器（SSH 账号需可读日志目录），或添加 LOCAL 类型采集本机日志。
+                    </td>
+                </tr>
+                <tr th:each="s : ${servers}">
+                    <td th:text="${s.id}"></td>
+                    <td th:text="${s.name}"></td>
+                    <td>
+                        <span class="badge" th:classappend="${s.type=='LOCAL'} ? 'bg-secondary' : 'bg-dark'"
+                              th:text="${s.type}">SSH</span>
+                    </td>
+                    <td class="mono" th:text="${s.type=='LOCAL'} ? '本机' : ${s.host} + ':' + ${s.port}"></td>
+                    <td th:text="${s.authType}"></td>
+                    <td>
+                        <span th:if="${s.lastTestOk == null}" class="text-muted small">未测试</span>
+                        <span th:if="${s.lastTestOk != null and s.lastTestOk}" class="badge bg-success">正常</span>
+                        <span th:if="${s.lastTestOk != null and !s.lastTestOk}" class="badge bg-danger"
+                              th:title="${s.lastTestMsg}">异常</span>
+                        <div class="small text-muted" th:if="${s.lastTestTime}"
+                             th:text="${#temporals.format(s.lastTestTime, 'MM-dd HH:mm')}"></div>
+                    </td>
+                    <td class="small text-muted" th:text="${s.remark}"></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-success"
+                                th:onclick="'lpTestServer(this, ' + ${s.id} + ')'">测试</button>
+                        <button class="btn btn-sm btn-outline-primary"
+                                th:onclick="'lpEditServer(' + ${s.id} + ')'">编辑</button>
+                        <form class="d-inline" method="post" th:action="@{'/servers/' + ${s.id} + '/delete'}"
+                              onsubmit="return lpConfirm(this, '确认删除该服务器？')">
+                            <button class="btn btn-sm btn-outline-danger">删除</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 服务器编辑弹窗 -->
+<div class="modal fade" id="serverModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" th:action="@{/servers/save}">
+                <div class="modal-header">
+                    <h5 class="modal-title">服务器配置</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="f-id">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">名称 *</label>
+                            <input class="form-control" name="name" id="f-name" required placeholder="如 订单服务-生产01">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">类型</label>
+                            <select class="form-select" name="type" id="f-type" onchange="lpServerTypeChange()">
+                                <option value="SSH">SSH 远程服务器</option>
+                                <option value="LOCAL">LOCAL 本机</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 ssh-field">
+                            <label class="form-label">端口</label>
+                            <input class="form-control" name="port" id="f-port" value="22" type="number">
+                        </div>
+                        <div class="col-md-6 ssh-field">
+                            <label class="form-label">主机地址 *</label>
+                            <input class="form-control" name="host" id="f-host" placeholder="10.0.0.11">
+                        </div>
+                        <div class="col-md-6 ssh-field">
+                            <label class="form-label">用户名 *</label>
+                            <input class="form-control" name="username" id="f-username" placeholder="root / deploy">
+                        </div>
+                        <div class="col-md-4 ssh-field">
+                            <label class="form-label">认证方式</label>
+                            <select class="form-select" name="authType" id="f-authType">
+                                <option value="PASSWORD">密码</option>
+                                <option value="KEY">私钥</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8 ssh-field">
+                            <label class="form-label">密码 <span class="text-muted small">（留空保持不变）</span></label>
+                            <input class="form-control" name="password" id="f-password" type="password" autocomplete="new-password">
+                        </div>
+                        <div class="col-12 ssh-field key-field">
+                            <label class="form-label">私钥（PEM，可选，留空保持不变）</label>
+                            <textarea class="form-control mono" name="privateKey" id="f-privateKey" rows="4"
+                                      placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea>
+                            <div class="form-text">认证方式选"私钥"时必填；私钥密码填在"密码"框</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">备注</label>
+                            <input class="form-control" name="remark" id="f-remark">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+<script>
+    const serversData = /*[[${servers}]]*/ [];
+    function lpEditServer(id) {
+        const s = serversData.find(x => x.id === id);
+        document.getElementById('f-id').value = id || '';
+        document.getElementById('f-name').value = s ? s.name : '';
+        document.getElementById('f-type').value = s ? s.type : 'SSH';
+        document.getElementById('f-host').value = s ? s.host : '';
+        document.getElementById('f-port').value = s && s.port ? s.port : 22;
+        document.getElementById('f-username').value = s ? s.username : '';
+        document.getElementById('f-authType').value = s ? s.authType : 'PASSWORD';
+        document.getElementById('f-password').value = '';
+        document.getElementById('f-privateKey').value = '';
+        document.getElementById('f-remark').value = s ? s.remark : '';
+        lpServerTypeChange();
+        new bootstrap.Modal(document.getElementById('serverModal')).show();
+    }
+    function lpServerTypeChange() {
+        const isLocal = document.getElementById('f-type').value === 'LOCAL';
+        document.querySelectorAll('.ssh-field').forEach(el => el.classList.toggle('d-none', isLocal));
+    }
+    function lpTestServer(btn, id) {
+        lpAction(btn, '/servers/' + id + '/test');
+    }
+</script>
+</body>
+</html>

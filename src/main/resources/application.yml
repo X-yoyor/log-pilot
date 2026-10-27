@@ -1,0 +1,50 @@
+server:
+  port: 18090
+
+spring:
+  application:
+    name: log-pilot
+  datasource:
+    url: jdbc:h2:file:./data/logpilot;AUTO_SERVER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate.format_sql: false
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  thymeleaf:
+    cache: false
+  servlet:
+    multipart:
+      max-file-size: 20MB
+  task:
+    scheduling:
+      pool:
+        size: 4
+
+logpilot:
+  # 用于加密数据库中存储的服务器密码/密钥（AES-GCM），部署时请修改
+  crypto-key: "logpilot-please-change-me"
+  collect:
+    # 采集调度心跳（秒）
+    ticker-seconds: 30
+    # 单文件单次采集最大读取字节
+    max-chunk-bytes: 16777216
+    # 单次采集单源最多入库的异常事件数（防止日志风暴撑爆数据库）
+    max-events-per-run: 5000
+  # 异常事件保留天数（每日凌晨 3 点清理）
+  retention-days: 30
+  # 启动时若无任何数据则创建演示数据（本机日志源 + 示例日志文件）
+  seed-demo: true
+
+logging:
+  level:
+    com.logpilot: info
+    org.hibernate.SQL: warn

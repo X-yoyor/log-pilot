@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('系统设置')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('settings')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <h5 class="my-3">系统设置</h5>
+
+    <form method="post" th:action="@{/settings/save}">
+        <div class="row g-3">
+            <!-- AI 设置 -->
+            <div class="col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>🤖 AI 能力接入（可选）</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="aiEnabled" id="aiEnabled" role="switch"
+                                   th:checked="${settings['ai.enabled'] == 'true'}">
+                            <label class="form-check-label small" for="aiEnabled">启用</label>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">
+                            兼容 OpenAI Chat Completions 协议的任意服务：OpenAI、智谱 GLM、DeepSeek、通义千问、Ollama 本地模型等。
+                            开启后可在异常详情页一键生成根因分析与修复方案。
+                        </p>
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="form-label">接口地址 Base URL</label>
+                                <input class="form-control mono" name="aiBaseUrl" th:value="${settings['ai.baseUrl']}">
+                                <div class="form-text">示例：https://api.openai.com/v1 · https://open.bigmodel.cn/api/paas/v4 · http://ollama-host:11434/v1</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">模型</label>
+                                <input class="form-control mono" name="aiModel" th:value="${settings['ai.model']}"
+                                       placeholder="glm-4-flash / gpt-4o-mini">
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">API Key <span class="text-muted small">（留空保持不变）</span></label>
+                                <input class="form-control mono" name="aiApiKey" type="password" autocomplete="new-password"
+                                       th:placeholder="${settings['ai.apiKey'] != ''} ? '已配置（留空不修改）' : '未配置'">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">超时（秒）</label>
+                                <input class="form-control" name="aiTimeout" type="number" min="10"
+                                       th:value="${settings['ai.timeoutSeconds']}">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">补充提示词（追加到分析 prompt，可选）</label>
+                                <textarea class="form-control" name="aiPrompt" rows="2"
+                                          th:text="${settings['ai.prompt']}"
+                                          placeholder="如：我们的技术栈是 Spring Cloud + MySQL 8，请结合该栈给出建议"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 邮件与数据 -->
+            <div class="col-lg-5">
+                <div class="card mb-3">
+                    <div class="card-header">📧 告警邮件 SMTP（可选）</div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-8">
+                                <label class="form-label">SMTP 服务器</label>
+                                <input class="form-control" name="mailHost" th:value="${settings['mail.host']}">
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label">端口</label>
+                                <input class="form-control" name="mailPort" type="number" th:value="${settings['mail.port']}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">用户名</label>
+                                <input class="form-control" name="mailUsername" th:value="${settings['mail.username']}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">密码/授权码 <span class="text-muted small">（留空不变）</span></label>
+                                <input class="form-control" name="mailPassword" type="password" autocomplete="new-password">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">发件人</label>
+                                <input class="form-control" name="mailFrom" th:value="${settings['mail.from']}">
+                            </div>
+                            <div class="col-6 d-flex align-items-end">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="mailSsl" id="mailSsl"
+                                           th:checked="${settings['mail.ssl'] != 'false'}">
+                                    <label class="form-check-label" for="mailSsl">SSL（465 端口勾选）</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">🗄 数据与协作</div>
+                    <div class="card-body">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-6">
+                                <label class="form-label">异常事件保留天数</label>
+                                <input class="form-control" name="retentionDays" type="number" min="3"
+                                       th:value="${settings['retention.days']}">
+                                <div class="form-text">每日凌晨 3 点自动清理过期事件</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">操作人标识（审计用）</label>
+                                <input class="form-control" name="opsActor" th:value="${settings['ops.actor']}"
+                                       placeholder="你的名字，如 zhangsan">
+                            </div>
+                            <div class="col-6">
+                                <a class="btn btn-outline-secondary w-100" th:href="@{/h2-console}" target="_blank">打开 H2 控制台</a>
+                            </div>
+                            <div class="col-6">
+                                <a class="btn btn-outline-secondary w-100" th:href="@{/audit}">查看操作审计 ›</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 my-3">
+            <button class="btn btn-primary px-4">保存设置</button>
+            <button type="button" class="btn btn-outline-primary" onclick="lpAction(this, '/settings/test-ai', {reloadDelay: 0})">
+                测试 AI 连通
+            </button>
+        </div>
+    </form>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+</body>
+</html>

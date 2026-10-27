@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('报告中心')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('reports')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 my-3">
+        <h5 class="mb-0">报告中心 <span class="text-muted small">（日报/周报自动汇总，可复制或邮件发送）</span></h5>
+        <div class="btn-group btn-group-sm">
+            <a class="btn" th:classappend="${range=='day'} ? 'btn-primary' : 'btn-outline-primary'"
+               th:href="@{/reports(range='day')}">昨日日报</a>
+            <a class="btn" th:classappend="${range=='week'} ? 'btn-primary' : 'btn-outline-primary'"
+               th:href="@{/reports(range='week')}">近 7 天周报</a>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span th:text="${report.title} + ' · ' + ${#temporals.format(report.from, 'yyyy-MM-dd')} + ' ~ ' + ${#temporals.format(report.to, 'yyyy-MM-dd')}"></span>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="lpCopyReport(this)">复制文本</button>
+                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                                data-bs-target="#sendMailModal" th:disabled="${!mailEnabled}"
+                                th:title="${mailEnabled} ? '' : '需先在系统设置配置 SMTP'">发送邮件</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <pre class="pre-wrap mb-0" id="report-text" style="max-height: 560px" th:text="${report.text}"></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header">关键指标</div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                        <tr><td>异常事件</td><td class="text-end num" th:text="${report.events} + ' 条'"></td>
+                            <td class="text-end small" th:classappend="${report.deltaPct > 0} ? 'text-danger' : 'text-success'"
+                                th:text="(${report.deltaPct >= 0} ? '↑' : '↓') + (${report.deltaPct < 0} ? 0 - ${report.deltaPct} : ${report.deltaPct}) + '%'"></td></tr>
+                        <tr><td>新增异常类型</td><td class="text-end num" th:text="${report.newGroups} + ' 个'"></td><td></td></tr>
+                        <tr><td>本期修复</td><td class="text-end num text-success" th:text="${report.resolved} + ' 个'"></td><td></td></tr>
+                        <tr><td>遗留待处理</td><td class="text-end num text-warn" th:text="${report.openRemain} + ' 个'"></td><td></td></tr>
+                        <tr><td>采集失败</td><td class="text-end num" th:classappend="${report.collectFails > 0} ? 'text-danger'"
+                              th:text="${report.collectFails} + ' 次'"></td><td></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card" th:if="${!report.topSources.isEmpty()}">
+                <div class="card-header">异常最多的日志源</div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>日志源</th><th class="text-end">条数</th></tr></thead>
+                        <tbody>
+                        <tr th:each="s : ${report.topSources}">
+                            <td th:text="${s.name}"></td>
+                            <td class="text-end"><span class="badge bg-danger num" th:text="${s.count}"></span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 发送邮件弹窗 -->
+<div class="modal fade" id="sendMailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">发送报告邮件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">收件人（多个用逗号分隔）</label>
+                <input class="form-control" id="report-mail-to" placeholder="ops@company.com">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="lpSendReport(this)">发送</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+<script>
+    function lpCopyReport(btn) {
+        const text = document.getElementById('report-text').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            btn.innerHTML = '✓ 已复制';
+            setTimeout(() => btn.innerHTML = '复制文本', 1500);
+        });
+    }
+    function lpSendReport(btn) {
+        const to = document.getElementById('report-mail-to').value.trim();
+        if (!to) { lpToast('请输入收件人', 'warning'); return; }
+        lpAction(btn, '/reports/send?range=[[${range}]]&to=' + encodeURIComponent(to));
+    }
+</script>
+</body>
+</html>

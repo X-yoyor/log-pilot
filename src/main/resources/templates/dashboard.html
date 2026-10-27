@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" data-bs-theme="dark">
+<head th:replace="~{fragments/layout :: head('仪表盘')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: nav('dashboard')}"></nav>
+<div th:replace="~{fragments/layout :: msg}"></div>
+
+<div class="container-fluid lp-container">
+    <!-- 平台健康条 -->
+    <div class="lp-health-strip mt-2"
+         th:classappend="${health.failingSources > 0 or health.diskPct > 85} ? 'lp-health-bad' : ((${health.overdueSources > 0 or health.diskPct > 70 or health.heapPct > 85}) ? 'lp-health-warn' : 'lp-health-ok')">
+        <span class="lp-health-dot"></span>
+        <span class="fw-semibold">平台健康</span>
+        <span class="text-muted">·</span>
+        <span th:text="${health.failingSources > 0} ? ${health.failingSources} + ' 个采集源连续失败' : '采集链路正常'"></span>
+        <span class="text-warn" th:if="${health.overdueSources > 0}"
+              th:text="'· ' + ${health.overdueSources} + ' 个调度延迟'"></span>
+        <span class="ms-auto mono small text-muted d-none d-md-inline">
+            磁盘 <span th:text="${health.diskPct} + '%'"></span> ·
+            堆内存 <span th:text="${health.heapPct} + '%'"></span> ·
+            数据库 <span th:text="${health.dataDirMb} + ' MB'"></span> ·
+            <a th:href="@{/health}">详情 ›</a>
+        </span>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="row g-3 mt-1">
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value text-danger" th:text="${summary.todayEvents}">0</div>
+                <div class="stat-label">今日异常事件</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value text-primary" th:text="${summary.newGroupsToday}">0</div>
+                <div class="stat-label">今日新增异常类型</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value text-warn" th:text="${summary.openGroups}">0</div>
+                <div class="stat-label">待处理异常组</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value text-success" th:text="${summary.resolvedGroups}">0</div>
+                <div class="stat-label">已修复</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value" th:text="${summary.servers}">0</div>
+                <div class="stat-label">服务器</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="card stat-card p-3">
+                <div class="stat-value" th:text="${summary.enabledSources} + '/' + ${summary.sources}">0</div>
+                <div class="stat-label">启用日志源</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <!-- 趋势图 -->
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>近 14 天异常趋势</span>
+                    <div class="btn-group btn-group-sm" id="trend-range">
+                        <button class="btn btn-outline-primary active" data-days="7">7天</button>
+                        <button class="btn btn-outline-primary" data-days="14">14天</button>
+                        <button class="btn btn-outline-primary" data-days="30">30天</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="trendChart" class="trend-chart"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 日志源健康 -->
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">近 7 天各日志源异常数</div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>日志源</th><th class="text-end">异常数</th></tr></thead>
+                        <tbody>
+                        <tr th:if="${#lists.isEmpty(sourceStats)}">
+                            <td colspan="2" class="text-muted text-center py-4">暂无数据（等待首次采集）</td>
+                        </tr>
+                        <tr th:each="s : ${sourceStats}">
+                            <td><a th:href="@{/events(sourceId=${s.sourceId})}" th:text="${s.name}"></a></td>
+                            <td class="text-end">
+                                <span class="badge num" th:classappend="${s.count > 100} ? 'bg-danger' : 'bg-warning'"
+                                      th:text="${s.count}"></span>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1 mb-2">
+        <!-- Top 异常 -->
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between">
+                    <span>近 7 天 Top 异常</span>
+                    <a class="small" th:href="@{/errors}">全部 ›</a>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>#</th><th>异常</th><th>知识库初判</th><th>次数</th></tr></thead>
+                        <tbody>
+                        <tr th:if="${#lists.isEmpty(topGroups)}">
+                            <td colspan="4" class="text-muted text-center py-4">暂无数据</td>
+                        </tr>
+                        <tr th:each="g, iter : ${topGroups}">
+                            <td th:text="${iter.index + 1}"></td>
+                            <td>
+                                <a th:href="@{'/errors/' + ${g.id}}">
+                                    <div class="mono" th:text="${g.exceptionClass ?: 'GeneralError'}"></div>
+                                    <div class="text-muted small text-truncate" style="max-width: 380px"
+                                         th:text="${g.template}"></div>
+                                </a>
+                            </td>
+                            <td>
+                                <span th:if="${g.knowledgeName}" class="badge"
+                                      th:classappend="${'badge-sev-' + (g.severity ?: 'MID')}"
+                                      th:text="${g.knowledgeName}"></span>
+                                <span th:unless="${g.knowledgeName}" class="text-muted small">未匹配</span>
+                            </td>
+                            <td><span class="badge bg-danger" th:text="${g.count}"></span></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 最近事件 -->
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between">
+                    <span>最新异常事件</span>
+                    <a class="small" th:href="@{/events}">全部 ›</a>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>时间</th><th>级别</th><th>消息</th></tr></thead>
+                        <tbody>
+                        <tr th:if="${#lists.isEmpty(recentEvents)}">
+                            <td colspan="3" class="text-muted text-center py-4">暂无数据</td>
+                        </tr>
+                        <tr th:each="e : ${recentEvents}">
+                            <td class="text-nowrap small" th:text="${#temporals.format(e.occurredAt, 'MM-dd HH:mm:ss')}"></td>
+                            <td><span class="badge bg-danger" th:text="${e.level}"></span></td>
+                            <td class="text-truncate" style="max-width: 320px">
+                                <a class="text-reset" th:href="@{'/errors/' + ${e.groupId}}" th:title="${e.message}"
+                                   th:text="${e.message}"></a>
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer th:replace="~{fragments/layout :: footer}"></footer>
+<script th:replace="~{fragments/layout :: scripts}"></script>
+<script th:src="@{/vendor/js/echarts.min.js}"></script>
+<script th:replace="~{fragments/layout :: scripts2}"></script>
+<script>
+    let trendChart = null;
+    function loadTrend(days) {
+        fetch('/api/dashboard/trend?days=' + days, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json())
+            .then(res => {
+                const data = res.data;
+                if (!trendChart) {
+                    trendChart = echarts.init(document.getElementById('trendChart'));
+                    window.addEventListener('resize', () => trendChart.resize());
+                }
+                trendChart.setOption({
+                    tooltip: {
+                        trigger: 'axis',
+                        backgroundColor: 'rgba(7,12,24,.92)',
+                        borderColor: 'rgba(56,189,248,.3)',
+                        textStyle: { color: '#e2e8f0', fontSize: 12 }
+                    },
+                    grid: { left: 44, right: 20, top: 24, bottom: 30 },
+                    xAxis: {
+                        type: 'category', data: data.map(d => d.date.slice(5)),
+                        axisLine: { lineStyle: { color: 'rgba(148,163,184,.25)' } },
+                        axisLabel: { color: '#94a3b8' }
+                    },
+                    yAxis: {
+                        type: 'value', minInterval: 1,
+                        axisLabel: { color: '#94a3b8' },
+                        splitLine: { lineStyle: { color: 'rgba(148,163,184,.1)' } }
+                    },
+                    series: [{
+                        type: 'line', smooth: true, symbolSize: 6,
+                        areaStyle: {
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: 'rgba(56,189,248,.28)' },
+                                { offset: 1, color: 'rgba(56,189,248,0)' }
+                            ])
+                        },
+                        lineStyle: { color: '#38bdf8', width: 2.5, shadowColor: 'rgba(56,189,248,.4)', shadowBlur: 10 },
+                        itemStyle: { color: '#38bdf8', borderColor: '#0b1120', borderWidth: 2 },
+                        data: data.map(d => d.count)
+                    }]
+                });
+            });
+    }
+    document.getElementById('trend-range').addEventListener('click', e => {
+        if (!e.target.dataset.days) return;
+        document.querySelectorAll('#trend-range .btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        loadTrend(e.target.dataset.days);
+    });
+    loadTrend(14);
+</script>
+</body>
+</html>
